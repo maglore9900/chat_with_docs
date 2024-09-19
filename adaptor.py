@@ -112,11 +112,14 @@ class Adaptor:
         retriever = qdrant.as_retriever()
         return retriever
     
-    def query_doc(self, query, doc):
+    def query_doc(self, query, retriever):
+        # if self.llm_text.lower() == "openai":
         qa = RetrievalQAWithSourcesChain.from_chain_type(
-                llm=self.llm, chain_type="stuff", retriever=doc, verbose=False
+                llm=self.llm, chain_type="stuff", retriever=retriever, verbose=True
             )
         result = qa.invoke(query)
+
+
         return result
     
     def chat(self, query):
