@@ -2,9 +2,12 @@
 #for LLM type openai needs the openai api key, if you want to use ollama just put "local" in LLM_TYPE
 LLM_TYPE="openai"
 OPENAI_API_KEY=''
+
 #this is the default url and IP for qdrant, change this as needed
 QDRANT_IP='http://localhost:6333'
+
 #this is where you specify an ollama model, use whatever you like
 LOCAL_MODEL="llama3.1"
+
 #this is the default url for ollama, change this as needed
 OLLAMA_URL="http://localhost:11434"
