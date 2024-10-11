@@ -18,4 +18,20 @@ so basically the steps are pretty simple
 5. run pip install to install all the required modules `pip install -r requirements_windows.txt`
 6. then `cp example_env.txt to .env`
 7. open that, and put in your info, like openai key or ollama or whatever
-8. then run `python main.py` to start the whole thing up
+
+
+# Configuration
+
+All of the easy configuration is done in the .env file. This section will explain what the values do, although you will also find it in the [example_env.txt](example_env.txt)
+
+#LLM_TYPE will take openai, local. Local will use Ollama
+`LLM_TYPE = 'openai'`
+
+#-----OpenAI variables
+`OPENAI_API_KEY = ''`
+`OPENAI_MODEL = 'gpt-4o-mini'`
+
+#-----Ollama variables
+#OLLAMA_MODEL will take any model you can load in ollama
+`OLLAMA_MODEL = 'gemma2'`
+`OLLAMA_URL = 'http://localhost:11434'`
