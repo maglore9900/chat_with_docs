@@ -9,6 +9,7 @@ from langchain_community.document_loaders import (
     UnstructuredPowerPointLoader,
     UnstructuredWordDocumentLoader,
     UnstructuredExcelLoader,
+    UnstructuredCSVLoader
 )
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Qdrant
@@ -77,11 +78,10 @@ class Adaptor:
             raise ValueError("Invalid LLM")
 
     def load_document(self, filename):
-        file_path = filename
         loaders = {
             ".pdf": PyPDFLoader,
             ".txt": TextLoader,
-            ".csv": CSVLoader,
+            ".csv": UnstructuredCSVLoader,
             ".doc": UnstructuredWordDocumentLoader,
             ".docx": UnstructuredWordDocumentLoader,
             ".md": UnstructuredMarkdownLoader,
@@ -92,8 +92,9 @@ class Adaptor:
         }
         for extension, loader_cls in loaders.items():
             if filename.endswith(extension):
-                loader = loader_cls(file_path)
+                loader = loader_cls(filename)
                 documents = loader.load()
+                print(f"file {documents}")
                 break
         else:
             raise ValueError("Invalid file type")

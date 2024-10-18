@@ -10,7 +10,7 @@ def main():
     
     parser.add_argument("-d", "--document", required=False, help="Path to the document to load")
     parser.add_argument("-q", "--query", required=False, help="Query to search in the document or vector db")
-    # parser.add_argument("-v", "--vector-db", required=False, help="Path to the vector database, easiest if you just give it a name in the same dir such as 'vector_db'")
+    parser.add_argument("-v", "--vector-db", required=False, help="Path to the vector database, easiest if you just give it a name in the same dir such as 'vector_db'")
     
     args = parser.parse_args()
     

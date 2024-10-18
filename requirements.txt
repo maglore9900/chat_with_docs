@@ -12,3 +12,5 @@ unstructured
 python-docx
 qdrant-client
 langchain_qdrant
+csvreader
+pandas
