@@ -1,7 +1,5 @@
 import environ
-from typing import Dict, List, Optional, Tuple, Annotated
 from langchain_community.document_loaders import (
-    CSVLoader,
     PyPDFLoader,
     TextLoader,
     UnstructuredMarkdownLoader,
@@ -33,7 +31,6 @@ class Adaptor:
         if self.llm_text.lower() == "openai":
             from langchain_openai import OpenAIEmbeddings, OpenAI
             from langchain_openai import ChatOpenAI
-
             self.llm = OpenAI(temperature=0, openai_api_key=env("OPENAI_API_KEY"))
             self.prompt = ChatPromptTemplate.from_template(
                 "answer the following request: {topic}"
@@ -62,10 +59,8 @@ class Adaptor:
                 encode_kwargs=encode_kwargs,
             )
         elif self.llm_text.lower() == "hybrid":
-            from langchain_openai import OpenAIEmbeddings, OpenAI
             from langchain_community.embeddings import HuggingFaceBgeEmbeddings
-
-            self.llm = OpenAI(temperature=0, openai_api_key=env("OPENAI_API_KEY"))
+            self.llm = OpenAI(temperature=0.3, openai_api_key=env("OPENAI_API_KEY"))
             model_name = "BAAI/bge-small-en"
             model_kwargs = {"device": "cpu"}
             encode_kwargs = {"normalize_embeddings": True}
@@ -94,7 +89,6 @@ class Adaptor:
             if filename.endswith(extension):
                 loader = loader_cls(filename)
                 documents = loader.load()
-                print(f"file {documents}")
                 break
         else:
             raise ValueError("Invalid file type")
@@ -119,9 +113,9 @@ class Adaptor:
                 llm=self.llm, chain_type="stuff", retriever=retriever, verbose=True
             )
         result = qa.invoke(query)
-
-
-        return result
+        answer = result["answer"].replace("\n", "")
+        source = result["sources"]
+        return f"Answer: {answer}\nSource: {source}"
     
     def chat(self, query):
         print(f"adaptor query: {query}")
