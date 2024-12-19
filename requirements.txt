@@ -1,16 +1,14 @@
 
 python-environ
-openai
-langgraph==0.0.37 
-langchainhub==0.1.15 
-psycopg2
+langchain
 langchain_experimental
 sentence_transformers
 langchain_openai
+langchain_ollama
 pypdf
 unstructured
 python-docx
-qdrant-client
-langchain_qdrant
 csvreader
-pandas
+faiss-cpu
+
+

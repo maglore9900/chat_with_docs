@@ -10,12 +10,13 @@ from langchain_community.document_loaders import (
     UnstructuredCSVLoader
 )
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Qdrant
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains import RetrievalQAWithSourcesChain 
-from qdrant_client.models import VectorParams, Distance
-from qdrant_client import QdrantClient
-from langchain_qdrant import QdrantVectorStore
+from langchain_community.vectorstores import FAISS
+import langchain_huggingface
+from pathlib import Path
+
+
 
 env = environ.Env()
 environ.Env.read_env()
@@ -24,10 +25,6 @@ environ.Env.read_env()
 class Adaptor:
     def __init__(self):
         self.llm_text = env("LLM_TYPE")
-        self.ollama_url = env("OLLAMA_URL")
-        self.local_model = env("LOCAL_MODEL")
-        self.qIP = env("QDRANT_IP").split(":")[0]
-        self.qP = env("QDRANT_IP").split(":")[1]
         if self.llm_text.lower() == "openai":
             from langchain_openai import OpenAIEmbeddings, OpenAI
             from langchain_openai import ChatOpenAI
@@ -36,14 +33,14 @@ class Adaptor:
                 "answer the following request: {topic}"
             )
             self.llm_chat = ChatOpenAI(
-                temperature=0.3, openai_api_key=env("OPENAI_API_KEY")
+                temperature=0.4, openai_api_key=env("OPENAI_API_KEY"),model_name=env("OPENAI_MODEL", default="gpt-4o-mini")
             )
             self.embedding = OpenAIEmbeddings(model="text-embedding-ada-002")
         elif self.llm_text.lower() == "local":
-            from langchain_community.llms import Ollama
-            from langchain_community.embeddings import HuggingFaceBgeEmbeddings
-            from langchain_community.chat_models import ChatOllama
-            self.llm = Ollama(base_url=self.ollama_url, model=self.local_model)
+            self.ollama_url = env("OLLAMA_URL")
+            self.local_model = env("LOCAL_MODEL")
+            from langchain_ollama import ChatOllama
+            from langchain_huggingface import HuggingFaceEmbeddings
             self.prompt = ChatPromptTemplate.from_template(
                 "answer the following request: {topic}"
             )
@@ -53,13 +50,14 @@ class Adaptor:
             model_name = "BAAI/bge-small-en"
             model_kwargs = {"device": "cpu"}
             encode_kwargs = {"normalize_embeddings": True}
-            self.embedding = HuggingFaceBgeEmbeddings(
+            
+            self.embedding = HuggingFaceEmbeddings(
                 model_name=model_name,
                 model_kwargs=model_kwargs,
                 encode_kwargs=encode_kwargs,
             )
         elif self.llm_text.lower() == "hybrid":
-            from langchain_community.embeddings import HuggingFaceBgeEmbeddings
+            from langchain_huggingface import HuggingFaceBgeEmbeddings
             self.llm = OpenAI(temperature=0.3, openai_api_key=env("OPENAI_API_KEY"))
             model_name = "BAAI/bge-small-en"
             model_kwargs = {"device": "cpu"}
@@ -99,18 +97,15 @@ class Adaptor:
     
     def vector_doc(self, filename):
         doc = self.load_document(filename)
-        qdrant = Qdrant.from_documents(
-            doc,
-            self.embedding,
-            location=":memory:"
-        )
-        retriever = qdrant.as_retriever()
+        retriever = FAISS.from_documents(doc, self.embedding).as_retriever()
         return retriever
     
-    def query_doc(self, query, retriever):
+    def query_doc(self, query, filename):
+        print(f"file: {filename}")
+        retriever = self.vector_doc(filename)
         # if self.llm_text.lower() == "openai":
         qa = RetrievalQAWithSourcesChain.from_chain_type(
-                llm=self.llm, chain_type="stuff", retriever=retriever, verbose=True
+                llm=self.llm_chat, chain_type="stuff", retriever=retriever, verbose=True
             )
         result = qa.invoke(query)
         answer = result["answer"].replace("\n", "")
@@ -124,52 +119,50 @@ class Adaptor:
         result = chain.invoke({"topic": query})
         return result
     
-    def add_to_datastore(self, filename, vector_db):
+    def query_datastore(self, query):
+        print("Entered function")
         try:
-            # Convert document into an embedding
-            embedding = self.emctor_doc(filename)
+            # Check if the FAISS index files exist in the vector_store directory
+            if not (Path("vector_store/index.faiss").exists() and Path("vector_store/index.pkl").exists()):
+                return "No documents have been added to the datastore yet."
 
-            # Connect to Qdrant (adjust host/port for a persistent instance)
-            client = QdrantClient(host=self.qIP, port=self.qP)  # Use appropriate connection settings
+            # Load the FAISS vector store from the specified directory
+            retriever = FAISS.load_local("vector_store", self.embedding, allow_dangerous_deserialization=True).as_retriever()
 
-            # Check if collection exists
-            try:
-                collection_info = client.get_collection(vector_db)
-                print(f"Collection '{vector_db}' already exists. Adding to existing collection.")
-            except Exception:
-                # If collection doesn't exist, create a new one
-                print(f"Collection '{vector_db}' does not exist. Creating a new collection.")
-                client.recreate_collection(
-                    collection_name=vector_db,  # Use vector_db as the collection name
-                    vectors_config=VectorParams(size=3072, distance=Distance.COSINE)
-                )
+            print("Retriever loaded successfully")
 
-            # Save the embedding to the vector store (either in new or existing collection)
-            vector_store = QdrantVectorStore(
-                client=client,
-                collection_name=vector_db,
-                embeddings=[embedding],  # A list of embeddings
-                payload=[{'filename': filename}]  # Metadata associated with the vector
+            # Create the QA chain with the loaded retriever
+            qa = RetrievalQAWithSourcesChain.from_chain_type(
+                llm=self.llm_chat, chain_type="stuff", retriever=retriever, verbose=True
             )
-            print(f"Successfully added {filename} to the datastore.")
+
+            # Query the retriever using the input query
+            result = qa.invoke(query)  # Directly passing the query to the QA chain
+            result = result['answer']  # Extract the answer from the result dictionary
+            return result
+
         except Exception as e:
             print(f"An error occurred: {e}")
+            return f"An error occurred: {e}"
     
-    def query_datastore(self, query, datastore):
+    def add_to_datastore(self, filename):
         try:
-            # Connect to Qdrant (adjust host/port for a persistent instance)
-            client = QdrantClient(host=self.qIP, port=self.qP)  # Use appropriate connection settings
+            doc = self.load_document(f"{filename}")
+            vectorstore_path = Path("vector_store")
+            
+            # Check if the vector_store directory exists and contains the index files
+            if not (vectorstore_path.exists() and (vectorstore_path / "index.faiss").exists() and (vectorstore_path / "index.pkl").exists()):
+                print("Vector store does not exist, creating a new one.")
+                vectorstore = FAISS.from_documents(doc, self.embedding)
+                vectorstore.save_local("vector_store")  # Save directly to the directory
+            else:
+                print("Vector store exists, loading and merging.")
+                existing_vectorstore = FAISS.load_local("vector_store", self.embedding, allow_dangerous_deserialization=True)
+                new_vectorstore = FAISS.from_documents(doc, self.embedding)
+                existing_vectorstore.merge_from(new_vectorstore)
+                existing_vectorstore.save_local("vector_store")  # Save the merged index back to the same directory
 
-            # Perform the search in the vector collection
-            search_results = client.search(
-                collection_name=datastore,
-                query_vector=query,
-                limit=5  
-            )
-            qa = RetrievalQAWithSourcesChain.from_chain_type(
-                llm=self.llm, chain_type="stuff", retriever=search_results, verbose=True
-            )
-            result = qa.invoke(query)
-            return result
+            print(f"Successfully added {filename} to the datastore.")
         except Exception as e:
-            print(e)
+            print(f"An error occured: {e}")
+            return(f"An error occurred: {e}")
